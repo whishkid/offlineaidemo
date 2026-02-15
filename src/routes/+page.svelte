@@ -7,7 +7,8 @@
 	let loading = $state(false);
 	let error = $state('');
 	let modelLoaded = $state(false);
-	let selectedTask: 'sentiment' | 'summarization' | 'qa' = $state('sentiment');
+	let selectedTask: 'sentiment' | 'summarization' = $state('sentiment');
+	let useMockMode = $state(false);
 
 	let sentimentPipeline: any = null;
 	let summarizationPipeline: any = null;
@@ -21,13 +22,17 @@
 			loading = true;
 			error = '';
 			
-			// Load sentiment analysis model (small and fast)
+			// Try to load sentiment analysis model (small and fast)
 			sentimentPipeline = await pipeline('sentiment-analysis');
 			
 			modelLoaded = true;
+			useMockMode = false;
 			loading = false;
 		} catch (err) {
-			error = 'Failed to load AI models: ' + (err as Error).message;
+			// If models can't be loaded (e.g., no internet), use mock mode
+			console.warn('Failed to load real AI models, using mock mode:', err);
+			useMockMode = true;
+			modelLoaded = true;
 			loading = false;
 		}
 	}
@@ -43,8 +48,19 @@
 			error = '';
 			result = '';
 
-			const output = await sentimentPipeline(inputText);
-			result = `Sentiment: ${output[0].label}\nConfidence: ${(output[0].score * 100).toFixed(2)}%`;
+			if (useMockMode) {
+				// Mock sentiment analysis for demo purposes
+				await new Promise(resolve => setTimeout(resolve, 500));
+				const sentiment = inputText.toLowerCase().includes('love') || 
+				                  inputText.toLowerCase().includes('great') || 
+				                  inputText.toLowerCase().includes('amazing') ||
+				                  inputText.toLowerCase().includes('excellent') ? 'POSITIVE' : 'NEGATIVE';
+				const score = Math.random() * 0.2 + 0.8;
+				result = `Sentiment: ${sentiment}\nConfidence: ${(score * 100).toFixed(2)}%\n\n(Demo mode - using mock analysis)`;
+			} else {
+				const output = await sentimentPipeline(inputText);
+				result = `Sentiment: ${output[0].label}\nConfidence: ${(output[0].score * 100).toFixed(2)}%`;
+			}
 			
 			loading = false;
 		} catch (err) {
@@ -64,16 +80,24 @@
 			error = '';
 			result = '';
 
-			// Load summarization model on demand
-			if (!summarizationPipeline) {
-				summarizationPipeline = await pipeline('summarization');
-			}
+			if (useMockMode) {
+				// Mock summarization for demo purposes
+				await new Promise(resolve => setTimeout(resolve, 800));
+				const words = inputText.split(' ');
+				const summary = words.slice(0, Math.min(15, Math.floor(words.length / 2))).join(' ') + '...';
+				result = `Summary:\n${summary}\n\n(Demo mode - using mock summarization)`;
+			} else {
+				// Load summarization model on demand
+				if (!summarizationPipeline) {
+					summarizationPipeline = await pipeline('summarization');
+				}
 
-			const output = await summarizationPipeline(inputText, {
-				max_length: 100,
-				min_length: 30
-			});
-			result = `Summary:\n${output[0].summary_text}`;
+				const output = await summarizationPipeline(inputText, {
+					max_length: 100,
+					min_length: 30
+				});
+				result = `Summary:\n${output[0].summary_text}`;
+			}
 			
 			loading = false;
 		} catch (err) {
@@ -123,8 +147,10 @@
 					</div>
 					<div>
 						<p class="text-sm font-medium text-gray-900">
-							{#if modelLoaded}
+							{#if modelLoaded && !useMockMode}
 								Model Ready
+							{:else if modelLoaded && useMockMode}
+								Demo Mode (Mock AI)
 							{:else if loading}
 								Loading Model...
 							{:else}
@@ -132,13 +158,17 @@
 							{/if}
 						</p>
 						<p class="text-xs text-gray-500">
-							Powered by Transformers.js
+							{#if useMockMode}
+								Running in demo mode - real models require internet for first load
+							{:else}
+								Powered by Transformers.js
+							{/if}
 						</p>
 					</div>
 				</div>
 				<div class="text-right">
-					<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-						100% Offline
+					<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium {useMockMode ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">
+						{useMockMode ? 'Demo Mode' : '100% Offline'}
 					</span>
 				</div>
 			</div>
